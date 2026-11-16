@@ -18,6 +18,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import unicodedata
 
 import duckdb
 import openpyxl
@@ -54,6 +55,25 @@ def pack_size(quantity):
     return grams if 5 <= grams <= 2000 else None
 
 
+SERVING_COUNT = re.compile(r"^\s*(\d+)\s*(biscuit|bar|slice|piece|cracker|cake|bun|sweet|finger|roll|pot|sachet)s?\b")
+
+
+def one_unit(quantity, serving_size, serving_quantity):
+    """One of what people say they had: the pack, unless the pack is a box or multipack of servings, then one
+    serving ("a Mars bar" in a 160 g four-pack is 40 g; "a Greggs sausage roll" in an 854 g bag is 103 g, Relay 4.40
+    on the phone). A serving of "2 biscuits (38 g)" is 19 g, as "three Weetabix" means three biscuits."""
+    pack = pack_size(quantity)
+    serving = num(serving_quantity, 5, 2000)
+    if serving:
+        m = SERVING_COUNT.match((serving_size or "").lower())
+        if m and int(m.group(1)) > 1:
+            serving /= int(m.group(1))
+        # More than three servings is a box or multipack; a Twix's 50 g is two 25 g fingers and still one Twix.
+        if pack is None or pack > 3 * serving:
+            return round(serving, 1)
+    return pack
+
+
 def kcal_for(row, alcoholic):
     """Calories per 100 g, mending the common slips: kJ typed in the kcal box, or only kJ given."""
     kcal = num(row["kcal"], 0, 4000)
@@ -85,12 +105,14 @@ def open_food_facts(path):
         select code, product_name as name, brands as brand, quantity,
                "energy-kcal_100g" as kcal, "energy-kj_100g" as kj, energy_100g as energy,
                proteins_100g as protein, carbohydrates_100g as carbs, fat_100g as fat,
-               coalesce(try_cast(unique_scans_n as integer), 0) as scans, categories_tags as cats
+               coalesce(try_cast(unique_scans_n as integer), 0) as scans, categories_tags as cats,
+               serving_size, serving_quantity
         from read_csv('{path}', delim='\t', quote='', header=true, all_varchar=true, ignore_errors=true,
                       max_line_size=10000000)
         where countries_tags like '%en:united-kingdom%' and coalesce(trim(product_name), '') <> ''
     """).fetchall()
-    cols = ["code", "name", "brand", "quantity", "kcal", "kj", "energy", "protein", "carbs", "fat", "scans", "cats"]
+    cols = ["code", "name", "brand", "quantity", "kcal", "kj", "energy", "protein", "carbs", "fat", "scans", "cats",
+            "serving_size", "serving_quantity"]
     best = {}
     for r in rows:
         row = dict(zip(cols, r))
@@ -108,7 +130,8 @@ def open_food_facts(path):
             continue
         multipack = bool(MULTIPACK.search(f"{name} {row['quantity'] or ''}".lower()))
         item = dict(source="off", code=row["code"], name=name, brand=brand, kcal=round(kcal, 1),
-                    protein=p, carbs=c, fat=f, per="100g", pack=None if multipack else pack_size(row["quantity"]),
+                    protein=p, carbs=c, fat=f, per="100g",
+                    pack=one_unit(None if multipack else row["quantity"], row["serving_size"], row["serving_quantity"]),
                     multipack=int(multipack), scans=row["scans"])
         # The same product entered twice: keep the one people scan most.
         key = (name.lower(), brand.lower(), (row["quantity"] or "").lower().replace(" ", ""))
@@ -138,6 +161,12 @@ def cofid(path=COFID):
     return out
 
 
+def plain(s):
+    """Without accents, for the search only: "Nestlé" and "Müller" are found by "nestle" and "muller" (Relay folds
+    what it searches for the same way, FoodLookup.words)."""
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
 def write_sqlite(path, foods, meta):
     if os.path.exists(path):
         os.remove(path)
@@ -155,7 +184,7 @@ def write_sqlite(path, foods, meta):
                    (i, f["source"], f["code"], f["name"], f["brand"], f["kcal"], f["protein"], f["carbs"],
                     f["fat"], f["per"], f["pack"], f["multipack"], f["scans"]))
         db.execute("insert into food_search(docid, name, brand) values(?,?,?)",
-                   (i, f["name"].replace("&", " and "), f["brand"].replace(",", " ")))
+                   (i, plain(f["name"]).replace("&", " and "), plain(f["brand"]).replace(",", " ")))
     db.executemany("insert into meta values(?,?)", [(k, str(v)) for k, v in meta.items()])
     db.commit()
     db.execute("insert into food_search(food_search) values('optimize')")
