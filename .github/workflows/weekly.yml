@@ -35,10 +35,18 @@ jobs:
       # GitHub switches off scheduled runs in a repo with no commits for 60 days; this weekly commit keeps it on,
       # and records what was published.
       - name: Record the build
+        # Catch up with GitHub first: anything pushed while this run waited or built would otherwise refuse the push.
         run: |
-          cp out/latest.json last-build.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add last-build.json
-          git commit -m "Food copy $(python -c "import json; print(json.load(open('last-build.json'))['version'])")" || exit 0
-          git push
+          version=$(python -c "import json; print(json.load(open('out/latest.json'))['version'])")
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main   # out/ is git-ignored, so the build survives this
+            cp out/latest.json last-build.json
+            git add last-build.json
+            git commit -m "Food copy $version" || exit 0
+            git push && exit 0
+            sleep 10
+          done
+          exit 1
