@@ -22,7 +22,9 @@ def main():
     latest = json.load(open(os.path.join(args.out, "latest.json")))
 
     api = HfApi(token=os.environ["HF_TOKEN"])
-    api.create_repo(REPO, repo_type="dataset", exist_ok=True, private=False)
+    # A key limited to this dataset can write to it but not create repos, so only create it the first time.
+    if not api.repo_exists(REPO, repo_type="dataset"):
+        api.create_repo(REPO, repo_type="dataset", private=False)
     old = sorted(f for f in api.list_repo_files(REPO, repo_type="dataset")
                  if f.startswith("relay-food-uk-") and f != latest["file"])
     here = os.path.dirname(os.path.abspath(__file__))
