@@ -11,6 +11,8 @@ KNOWN = [
     ("name:baked name:beans brand:heinz", "off", 60, 95),
     ("name:coca name:cola", "off", 35, 48),
     ("name:weetabix", "off", 330, 390),
+    ("name:red name:bull brand:red", "off", 0, 50),   # its most-scanned entry once said 463
+    ("name:wholemeal name:bread", "off", 180, 280),
     ("name:ready name:salted brand:walkers", "off", 480, 560),
     ("name:lager", "cofid", 5, 60),
     ("name:potato name:chips", "cofid", 150, 400),

@@ -32,6 +32,7 @@ CREDITS = ("Branded products: Open Food Facts (openfoodfacts.org), Open Database
 ALCOHOL = re.compile(r"\b(beer|lager|ale|stout|cider|wine|prosecco|champagne|gin|vodka|rum|whisky|whiskey|"
                      r"brandy|liqueur|spirit|porter|ipa|sake|alcoholic)\b")
 MULTIPACK = re.compile(r"\b\d+\s*(?:pk|pack)\b|multipack|\bpack of \d")
+NON_LATIN = re.compile(r"[Ͱ-῿⺀-￯]")
 PACK = re.compile(r"(?:\d+\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)(?![a-z])")
 
 
@@ -70,6 +71,10 @@ def kcal_for(row, alcoholic):
             kcal /= 4.184
         if macros > 8 and kcal < 0.5 * macros:
             return None  # figures that can't all be right (an apple juice at 0 kcal)
+        # Calories that protein, carbs and fat can't explain: Red Bull at 463 per 100 ml (it's 46), a Tesco wholemeal
+        # loaf at 580 (16 Nov 2026). Alcohol, and sweets' polyols and fibre, move it a little, never this far.
+        if not alcoholic and macros > 20 and not 0.55 <= kcal / macros <= 1.6:
+            return None
     return kcal if 0 <= kcal <= 900 else None  # 0 is real: diet drinks, water
 
 
@@ -90,11 +95,15 @@ def open_food_facts(path):
     for r in rows:
         row = dict(zip(cols, r))
         name, brand = row["name"].strip(), (row["brand"] or "").strip()
-        alcoholic = bool(ALCOHOL.search(f"{name} {row['cats'] or ''}".lower()))
+        if NON_LATIN.search(name):
+            continue  # tagged as sold in the UK, but named in Cyrillic, Greek, Arabic...: no English search finds it
+        # "non-alcoholic-beverages" (Red Bull's category) says alcoholic too.
+        text = re.sub(r"non-alcoholic|alcohol-free|low-alcohol|0\.0", " ", f"{name} {row['cats'] or ''}".lower())
+        alcoholic = bool(ALCOHOL.search(text))
         kcal = kcal_for(row, alcoholic)
         if kcal is None:
             continue
-        p, c, f = (num(row[k]) for k in ("protein", "carbs", "fat"))
+        p, c, f = (None if x is None else round(x, 1) for x in (num(row[k]) for k in ("protein", "carbs", "fat")))
         if sum(x or 0 for x in (p, c, f)) > 105:
             continue
         multipack = bool(MULTIPACK.search(f"{name} {row['quantity'] or ''}".lower()))
