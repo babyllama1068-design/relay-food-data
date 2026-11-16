@@ -1,0 +1,4 @@
+out/
+off.csv.gz
+previous.json
+__pycache__/

@@ -1,0 +1,44 @@
+name: Weekly food copy
+
+on:
+  schedule:
+    - cron: "0 5 * * 6"   # Saturdays, 05:00 UTC (5 or 6 am in London)
+  workflow_dispatch:       # the Run workflow button: build one now
+
+permissions:
+  contents: write          # to commit last-build.json (below)
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Download Open Food Facts' export
+        run: curl -sSfL --retry 3 -o off.csv.gz https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz
+      - name: Last week's copy, for the size check
+        run: curl -sSfL -o previous.json https://huggingface.co/datasets/Killerfuzzball/relay-food-uk/resolve/main/latest.json || echo '{}' > previous.json
+      - name: Build and check
+        run: python build.py --off off.csv.gz --out out --previous previous.json
+      - name: Publish to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python publish.py --out out
+      # GitHub switches off scheduled runs in a repo with no commits for 60 days; this weekly commit keeps it on,
+      # and records what was published.
+      - name: Record the build
+        run: |
+          cp out/latest.json last-build.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last-build.json
+          git commit -m "Food copy $(python -c "import json; print(json.load(open('last-build.json'))['version'])")" || exit 0
+          git push
