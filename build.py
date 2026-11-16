@@ -61,7 +61,9 @@ SERVING_COUNT = re.compile(r"^\s*(\d+)\s*(biscuit|bar|slice|piece|cracker|cake|b
 def one_unit(quantity, serving_size, serving_quantity):
     """One of what people say they had: the pack, unless the pack is a box or multipack of servings, then one
     serving ("a Mars bar" in a 160 g four-pack is 40 g; "a Greggs sausage roll" in an 854 g bag is 103 g, Relay 4.40
-    on the phone). A serving of "2 biscuits (38 g)" is 19 g, as "three Weetabix" means three biscuits."""
+    on the phone). A serving of "2 biscuits (38 g)" is 19 g, as "three Weetabix" means three biscuits.
+    Gives (size, whether it came from a box or multipack): Relay prefers sizes of things sold singly, as a Mars bar
+    on its own is 51 g but 40 g in a four-pack (Relay 4.40.1 on the phone)."""
     pack = pack_size(quantity)
     serving = num(serving_quantity, 5, 2000)
     if serving:
@@ -69,9 +71,11 @@ def one_unit(quantity, serving_size, serving_quantity):
         if m and int(m.group(1)) > 1:
             serving /= int(m.group(1))
         # More than three servings is a box or multipack; a Twix's 50 g is two 25 g fingers and still one Twix.
-        if pack is None or pack > 3 * serving:
-            return round(serving, 1)
-    return pack
+        if pack is None:
+            return round(serving, 1), False  # no pack size given: the serving is all there is, not a box's
+        if pack > 3 * serving:
+            return round(serving, 1), True
+    return pack, False
 
 
 def kcal_for(row, alcoholic):
@@ -129,10 +133,11 @@ def open_food_facts(path):
         if sum(x or 0 for x in (p, c, f)) > 105:
             continue
         multipack = bool(MULTIPACK.search(f"{name} {row['quantity'] or ''}".lower()))
+        unit, from_box = one_unit(None if multipack else row["quantity"], row["serving_size"], row["serving_quantity"])
         item = dict(source="off", code=row["code"], name=name, brand=brand, kcal=round(kcal, 1),
-                    protein=p, carbs=c, fat=f, per="100g",
-                    pack=one_unit(None if multipack else row["quantity"], row["serving_size"], row["serving_quantity"]),
-                    multipack=int(multipack), scans=row["scans"])
+                    protein=p, carbs=c, fat=f, per="100g", pack=unit,
+                    # 1: sold in a box or multipack, so its size is one serving of it, not one pack.
+                    multipack=int(multipack or from_box), scans=row["scans"])
         # The same product entered twice: keep the one people scan most.
         key = (name.lower(), brand.lower(), (row["quantity"] or "").lower().replace(" ", ""))
         if key not in best or item["scans"] > best[key]["scans"]:
