@@ -1,7 +1,8 @@
 """
-Publishes a built copy to Hugging Face: the new file and latest.json in one commit, so a phone never sees a
-latest.json naming a file that isn't there yet. Keeps the last four weeks' files, so a bad copy can be rolled back
-by pointing latest.json at an older one.
+Publishes a built copy to Hugging Face: the new file, latest.json and its signature (latest.json.sig, made by the
+workflow's Sign step) in one commit, so a phone never sees a latest.json naming a file that isn't there yet, or one
+without its signature. Keeps the last four weeks' files, so a bad copy can be rolled
+back by pointing latest.json at an older one and signing it again (Relay's docs/operations.md).
 
     HF_TOKEN=... python publish.py --out out
 """
@@ -20,6 +21,9 @@ def main():
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
     latest = json.load(open(os.path.join(args.out, "latest.json")))
+    # Relay refuses an unsigned latest.json, so publishing one would only stop phones updating.
+    if not os.path.exists(os.path.join(args.out, "latest.json.sig")):
+        raise SystemExit("out/latest.json.sig is missing: sign latest.json first (the workflow's Sign step)")
 
     api = HfApi(token=os.environ["HF_TOKEN"])
     # A key limited to this dataset can write to it but not create repos, so only create it the first time.
@@ -30,6 +34,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ops = [CommitOperationAdd(latest["file"], os.path.join(args.out, latest["file"])),
            CommitOperationAdd("latest.json", os.path.join(args.out, "latest.json")),
+           CommitOperationAdd("latest.json.sig", os.path.join(args.out, "latest.json.sig")),
            CommitOperationAdd("README.md", os.path.join(here, "dataset-card.md"))]
     ops += [CommitOperationDelete(f) for f in old[:max(0, len(old) - (KEEP - 1))]]
     api.create_commit(REPO, ops, repo_type="dataset",

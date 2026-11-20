@@ -14,7 +14,7 @@ A small, cleaned food list for [Relay](https://github.com/babyllama1068-design/r
 
 Each food keeps only its name, brand, calories, protein, carbohydrate and fat per 100 g (per 100 ml for alcoholic drinks from CoFID), and one pack's size. Entries with impossible figures are left out, kJ typed as kcal is put right, and duplicates are merged.
 
-`latest.json` names the current file and its SHA-256. The file is a gzipped SQLite database: table `food`, full-text search in `food_search` (FTS4, porter), and `meta`.
+`latest.json` names the current file and its SHA-256, and `latest.json.sig` is its signature (ECDSA P-256 with SHA-256, DER in base64; the public key is `signing-key.pub.pem` in the GitHub repo). The file is a gzipped SQLite database: table `food`, full-text search in `food_search` (FTS4, porter), and `meta`.
 
 ## Licences and credit
 

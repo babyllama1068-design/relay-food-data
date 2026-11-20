@@ -28,6 +28,22 @@ jobs:
         run: curl -sSfL -o previous.json https://huggingface.co/datasets/Killerfuzzball/relay-food-uk/resolve/main/latest.json || echo '{}' > previous.json
       - name: Build and check
         run: python build.py --off off.csv.gz --out out --previous previous.json
+      # Relay believes latest.json only with this signature (FoodCopy.kt), so whoever held the Hugging Face account
+      # couldn't change the file and its SHA-256 together. ECDSA P-256, which every Android version Relay runs on checks
+      # without a library. The key is only written to a private temporary file, deleted when the step ends; checking
+      # against signing-key.pub.pem (the half in Relay) stops a wrong key here, before any phone sees it.
+      - name: Sign latest.json
+        env:
+          SIGNING_KEY: ${{ secrets.FOOD_COPY_SIGNING_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then echo "::error::The FOOD_COPY_SIGNING_KEY secret is missing"; exit 1; fi
+          umask 077
+          key=$(mktemp)
+          trap 'rm -f "$key" signature.der' EXIT
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          openssl dgst -sha256 -sign "$key" -out signature.der out/latest.json
+          openssl dgst -sha256 -verify signing-key.pub.pem -signature signature.der out/latest.json
+          base64 -w0 signature.der > out/latest.json.sig
       - name: Publish to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
