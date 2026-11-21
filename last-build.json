@@ -1,11 +1,11 @@
 {
   "format": 1,
-  "version": "2026-11-20",
-  "file": "relay-food-uk-2026-11-20.sqlite.gz",
-  "sha256": "b4586820a8546c221e7c56198c08b9a59086b5a76146d9755cfb75099bba247d",
-  "size": 11665574,
-  "unpacked_size": 24915968,
-  "off_products": 142659,
+  "version": "2026-11-21",
+  "file": "relay-food-uk-2026-11-21.sqlite.gz",
+  "sha256": "9cfb64e69748e1abdc1ec539f530b434743c2798b463127ad5d1338d2a0dd154",
+  "size": 11673178,
+  "unpacked_size": 24948736,
+  "off_products": 142737,
   "cofid_foods": 2849,
   "credits": "Branded products: Open Food Facts (openfoodfacts.org), Open Database Licence (ODbL). Plain foods: McCance and Widdowson's Composition of Foods Integrated Dataset 2021 (UKHSA, OHID), Crown copyright, Open Government Licence v3.0."
 }
